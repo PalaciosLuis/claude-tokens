@@ -7,11 +7,12 @@ A real-time terminal dashboard for Claude Code token usage. Reads local session 
 
 ## Features
 
-- Live token usage by model: Opus, Sonnet, Haiku
-- Input / Output / Cache write / Cache read breakdown
-- Monthly quota bar calibrated to your billing cycle
-- Today's usage vs. all-time totals
+- Live daily token usage with % of your daily limit
+- Token breakdown by model: Opus, Sonnet, Haiku
+- Input / Output / Cache write / Cache read tracking
+- All-time usage stats
 - Top projects by token consumption
+- Respects your local timezone
 - Refreshes every 5 seconds
 - Works on Linux, macOS, and Windows
 
@@ -49,22 +50,31 @@ python3 claude-tokens.py
 Edit the top of `claude-tokens.py`:
 
 ```python
-PLAN_NAME            = "Pro ($20/mo)"   # label only
-MONTHLY_LIMIT_TOKENS = 10_000_000       # tune to match your real quota
-BILLING_CYCLE_DAY    = 1                # day of month your billing resets (1-28)
+PLAN_NAME          = "Pro ($20/mo)"   # label only
+DAILY_LIMIT_TOKENS = 500_000          # your daily usage limit
 ```
 
-Anthropic does not publish exact token limits per plan. Start with the default and adjust `MONTHLY_LIMIT_TOKENS` until the percentage matches what Claude Code shows in its own usage indicator.
+To find your daily limit, check your usage in Claude Code and calculate:
+- If Claude shows 29% and you've used 110K tokens today, your limit ≈ 110K / 0.29 = 379K tokens/day
+
+Adjust `DAILY_LIMIT_TOKENS` until the percentage matches Claude's indicator.
 
 ## How it works
 
-Claude Code saves every API response (including `usage` metadata) to JSONL files under `~/.claude/projects/`. This dashboard parses those files, aggregates token counts by model and date, and renders the result using [rich](https://github.com/Textualize/rich).
+Claude Code saves every API response (including `usage` metadata) to JSONL files under `~/.claude/projects/`. This dashboard parses those files, aggregates token counts by model and date (respecting your local timezone), and renders the result using [rich](https://github.com/Textualize/rich).
 
 ## Privacy
 
 This script **only reads local files** under `~/.claude/projects/`. It makes no network requests and sends no data anywhere.
 
 > **Never commit your `~/.claude/` directory or any `.jsonl` files** — they contain your conversation history.
+
+## Display Breakdown
+
+- **Daily usage** — tokens consumed today vs your daily limit
+- **Today breakdown** — tokens per model (Opus, Sonnet, Haiku) with share percentage
+- **All-Time** — total tokens across all your usage
+- **Top Projects** — which projects consumed the most tokens
 
 ## License
 

@@ -16,7 +16,7 @@ import json
 import glob
 import os
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from pathlib import Path
 from collections import defaultdict
 
@@ -29,9 +29,8 @@ from rich.align import Align
 from rich import box
 
 # -- Plan config -----------------------------------------------------------
-PLAN_NAME            = "Pro ($20/mo)"
-MONTHLY_LIMIT_TOKENS = 10_000_000   # tune to match your real quota
-BILLING_CYCLE_DAY    = 1            # day of month your billing resets (1-28)
+PLAN_NAME               = "Pro ($20/mo)"
+DAILY_LIMIT_TOKENS      = 500_000       # your daily usage limit (tune to match your plan)
 # --------------------------------------------------------------------------
 
 ANTHROPIC_ORANGE = "color(208)"
@@ -64,14 +63,6 @@ def model_family(model_str: str) -> str:
     return "other"
 
 
-def billing_cycle_start() -> date:
-    today = date.today()
-    day   = BILLING_CYCLE_DAY
-    if today.day >= day:
-        return today.replace(day=day)
-    if today.month == 1:
-        return date(today.year - 1, 12, day)
-    return date(today.year, today.month - 1, day)
 
 
 def project_name(fpath: Path) -> str:
@@ -94,27 +85,24 @@ def load_usage():
     projects_dir = claude_dir() / "projects"
     files        = list(projects_dir.rglob("*.jsonl")) if projects_dir.exists() else []
     today_date   = date.today()
-    cycle_start  = billing_cycle_start()
 
-    def parse_local_date(ts: str):
+    def parse_datetime(ts: str):
         if not ts:
             return None
         try:
-            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            return dt.astimezone().date()
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
         except Exception:
             return None
+
+    def parse_local_date(ts: str):
+        dt = parse_datetime(ts)
+        return dt.astimezone().date() if dt else None
 
     def is_today(ts: str) -> bool:
         return parse_local_date(ts) == today_date
 
-    def is_this_cycle(ts: str) -> bool:
-        d = parse_local_date(ts)
-        return d is not None and d >= cycle_start
-
     total      = defaultdict(lambda: defaultdict(int))
     today      = defaultdict(lambda: defaultdict(int))
-    cycle      = defaultdict(lambda: defaultdict(int))
     by_project = defaultdict(lambda: defaultdict(int))
 
     for fpath in files:
@@ -150,16 +138,10 @@ def load_usage():
                         today[family]["output"]       += out
                         today[family]["cache_create"] += cc
                         today[family]["cache_read"]   += cr
-
-                    if is_this_cycle(ts_str):
-                        cycle[family]["input"]        += inp
-                        cycle[family]["output"]       += out
-                        cycle[family]["cache_create"] += cc
-                        cycle[family]["cache_read"]   += cr
         except (OSError, PermissionError):
             continue
 
-    return total, today, cycle, by_project
+    return total, today, by_project
 
 
 def fmt(n: int) -> str:
@@ -190,22 +172,6 @@ def make_logo_panel() -> Panel:
     return Panel(Align.center(logo + sub), border_style=ANTHROPIC_ORANGE, padding=(0, 1))
 
 
-def make_quota_panel(today: dict, cycle: dict) -> Panel:
-    used_cycle = total_tokens(cycle)
-    used_today = total_tokens(today)
-    pct        = min(used_cycle / MONTHLY_LIMIT_TOKENS, 1.0) if MONTHLY_LIMIT_TOKENS else 0
-    color      = "green" if pct < 0.6 else "yellow" if pct < 0.85 else "red"
-    cycle_from = billing_cycle_start().isoformat()
-
-    t = Text()
-    t.append("Monthly quota  ", style="bold white")
-    t.append(f"{fmt(used_cycle)} / {fmt(MONTHLY_LIMIT_TOKENS)} tokens   ", style=DIM_COLOR)
-    t.append_text(pct_bar(used_cycle, MONTHLY_LIMIT_TOKENS, width=30))
-    t.append(f"\n  Cycle from {cycle_from}  •  Today: {fmt(used_today)} tokens", style=DIM_COLOR)
-    t.append(f"\n  (Adjust MONTHLY_LIMIT_TOKENS if % doesn't match Claude's indicator)", style="dim")
-
-    return Panel(t, title=f"[{ANTHROPIC_ORANGE}]Quota — {PLAN_NAME}[/{ANTHROPIC_ORANGE}]",
-                 border_style=color, padding=(0, 1))
 
 
 def make_usage_table(label: str, data: dict, show_share: bool = False) -> Table:
@@ -290,18 +256,33 @@ def make_projects_table(by_project: dict) -> Table:
     return t
 
 
+def make_daily_panel(today: dict) -> Panel:
+    used_today = total_tokens(today)
+    pct        = min(used_today / DAILY_LIMIT_TOKENS, 1.0) if DAILY_LIMIT_TOKENS else 0
+    color      = "green" if pct < 0.6 else "yellow" if pct < 0.85 else "red"
+
+    t = Text()
+    t.append("Daily usage  ", style="bold white")
+    t.append(f"{fmt(used_today)} / {fmt(DAILY_LIMIT_TOKENS)} tokens   ", style=DIM_COLOR)
+    t.append_text(pct_bar(used_today, DAILY_LIMIT_TOKENS, width=30))
+    t.append(f"\n  (Adjust DAILY_LIMIT_TOKENS to match your plan)", style="dim")
+
+    return Panel(t, title=f"[{ANTHROPIC_ORANGE}]Today ({date.today().isoformat()})[/{ANTHROPIC_ORANGE}]",
+                 border_style=color, padding=(0, 1))
+
+
 def make_frame() -> Panel:
     from rich.console import Group
 
-    total, today, cycle, by_project = load_usage()
+    total, today, by_project = load_usage()
     now = datetime.now().strftime("%H:%M:%S")
 
     rows = [
         Columns([make_logo_panel()], align="center", expand=True),
         Text(""),
-        make_quota_panel(today, cycle),
+        make_daily_panel(today),
         Text(""),
-        make_usage_table(f"Today  ({date.today().isoformat()})", today, show_share=True),
+        make_usage_table(f"Today breakdown", today, show_share=True),
         Text(""),
         make_usage_table("All-Time", total),
         Text(""),
