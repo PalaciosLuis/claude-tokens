@@ -1,0 +1,6 @@
+*.jsonl
+*.json
+.claude/
+__pycache__/
+*.pyc
+.env
