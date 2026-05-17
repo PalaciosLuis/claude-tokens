@@ -80,5 +80,6 @@ This script **only reads local files** under `~/.claude/projects/`. It makes no 
 
 MIT
 
-<img width="937" height="854" alt="image" src="https://github.com/user-attachments/assets/77799b85-271d-45af-9745-1244306b327d" />
+<img width="942" height="777" alt="image" src="https://github.com/user-attachments/assets/fdaee2fc-79f7-41b4-9354-3ff0038d2c74" />
+
 
