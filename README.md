@@ -79,3 +79,6 @@ This script **only reads local files** under `~/.claude/projects/`. It makes no 
 ## License
 
 MIT
+
+<img width="937" height="854" alt="image" src="https://github.com/user-attachments/assets/77799b85-271d-45af-9745-1244306b327d" />
+
